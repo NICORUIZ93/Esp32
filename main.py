@@ -1,33 +1,40 @@
 import machine
-import bme280_float as bme280
-import time
-import sdcard
 import os
-import csv
+import sdcard
+import time
+import lib.bme280_float as bme
 
 i2c = machine.I2C(0, sda=machine.Pin(21), scl=machine.Pin(22))
-bme = bme280.BME280(i2c=i2c)
+bme = bme.BME280(i2c=i2c)
 
-spi = machine.SPI(1, baudrate=10000000, polarity=0, phase=0)
+# Crear objeto SPI
+spi = machine.SPI(1, baudrate=10000000, polarity=0, phase=0, sck=machine.Pin(
+    18), mosi=machine.Pin(23), miso=machine.Pin(19))
+
+# Crear objeto Pin para el pin CS
 cs = machine.Pin(5, machine.Pin.OUT)
+
+# Crear objeto SDCard
 sd = sdcard.SDCard(spi, cs)
 
+# Montar la tarjeta SD
+os.mount(sd, "/sd")
+
 # Configurar el archivo CSV
-filename = '/sdcard/data.csv'
-if 'data.csv' not in os.listdir('/sdcard'):
-    with open(filename, 'w') as f:
-        writer = csv.writer(f)
-        writer.writerow(['Timestamp', 'Altura'])
+filename = '/sd/data.csv'
+with open(filename, 'w') as file:
+    file.write('Timestamp,Data\n')
 
 # Leer la altura cada 30 segundos y escribirla en el archivo CSV
 altura_inicio = bme.altitude  # Función para leer la altura inicial del experimento
 estado = 0
 paracaidas_activado = False
 
+
 def activar_paracaidas():
     with open(filename, 'a') as f:
-        writer = csv.writer(f)
-        writer.writerow([time.time(), "Activar paracaidas"])
+        f.write(str(time.time()) + "," + "Activar paracaidas\n")
+
 
 while True:
     # Función para leer la altura actual del experimento
@@ -43,8 +50,10 @@ while True:
         activar_paracaidas()  # Función para activar el paracaídas
     if estado == 3 and paracaidas_activado == True:
         # Experimento completado
+        os.umount("/sd")
         break
+
     with open(filename, 'a') as f:
-        writer = csv.writer(f)
-        writer.writerow([time.time(), altura_actual])
-    time.sleep(30)
+        f.write(str(time.time()) + "," + str(int(altura_actual)) + "\n")
+        print("Dato almacenado")
+    time.sleep(5)
