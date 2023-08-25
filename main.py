@@ -2,7 +2,10 @@ import machine
 import os
 import sdcard
 import time
+from _thread import start_new_thread
 import lib.bme280_float as bme
+import sys
+
 
 i2c = machine.I2C(0, sda=machine.Pin(21), scl=machine.Pin(22))
 bme = bme.BME280(i2c=i2c)
@@ -26,7 +29,8 @@ with open(filename, 'w') as file:
     file.write('Timestamp,Data\n')
 
 # Leer la altura cada 30 segundos y escribirla en el archivo CSV
-altura_inicio = bme.altitude  # Función para leer la altura inicial del experimento
+# Función para leer la altura inicial del experimento
+altura_inicio = int(bme.altitude)
 estado = 0
 paracaidas_activado = False
 
@@ -36,24 +40,49 @@ def activar_paracaidas():
         f.write(str(time.time()) + "," + "Activar paracaidas\n")
 
 
-while True:
-    # Función para leer la altura actual del experimento
-    altura_actual = bme.altitude
-    if altura_actual >= altura_inicio + 50 and estado == 0:
-        estado = 1
-    elif altura_actual >= altura_inicio + 100 and estado == 1:
-        estado = 2
-    elif altura_actual >= altura_inicio + 150 and estado == 2:
-        estado = 3
-    elif altura_actual < altura_inicio + 160 and estado == 3 and paracaidas_activado == False:
-        paracaidas_activado = True
-        activar_paracaidas()  # Función para activar el paracaídas
-    if estado == 3 and paracaidas_activado == True:
-        # Experimento completado
-        os.umount("/sd")
-        break
-
+def almacenar_estados(altura_actual):
     with open(filename, 'a') as f:
         f.write(str(time.time()) + "," + str(int(altura_actual)) + "\n")
-        print("Dato almacenado")
-    time.sleep(5)
+        print("Estado almacenado", altura_actual)
+
+
+def toma_datos():
+    while True:
+        altura_actual = int(bme.altitude)
+        with open(filename, 'a') as f:
+            f.write(str(time.time()) + "," + str(int(altura_actual)) + "\n")
+            print("Dato almacenado")
+        time.sleep(1)
+
+
+start_new_thread(toma_datos, ())
+
+while True:
+    altura_actual = int(bme.altitude)
+    print(altura_actual)
+
+    if altura_actual >= (altura_inicio + 50) and estado == 0:
+        almacenar_estados(altura_actual)
+        print("Estado 0")
+        estado = 1
+    elif altura_actual >= (altura_inicio + 100) and estado == 1:
+        almacenar_estados(altura_actual)
+        print("Estado 1")
+        estado = 2
+    elif altura_actual >= (altura_inicio + 150) and estado == 2:
+        almacenar_estados(altura_actual)
+        print("Estado 2")
+        estado = 3
+    elif altura_actual >= (altura_inicio + 200) and estado == 3:
+        almacenar_estados(altura_actual)
+        print("Estado 3")
+        estado = 4
+    elif altura_actual < (altura_inicio + 160) and estado == 4 and paracaidas_activado == False:
+        almacenar_estados(altura_actual)
+        paracaidas_activado = True
+        activar_paracaidas()
+        print("Estado Final")
+        os.umount("/sd")
+        sys.exit()
+
+    time.sleep(1)
