@@ -147,5 +147,9 @@ def gps_data():
 
 
 while True:
-    gps_data()
-    time.sleep(1)
+    try:
+        gps_data()
+        time.sleep(1)
+    except:
+        print("An exception occurred")
+        raise
