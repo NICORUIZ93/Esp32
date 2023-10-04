@@ -1,25 +1,22 @@
+# from machine import Pin, PWM, I2C, UART
 # import machine
-# from machine import Pin, PWM, I2C
 # import os
 # import sdcard
 # import time
-# from _thread import start_new_thread
-# import lib.bmp180 as bme
 # import sys
-# from bmp180 import BMP180
-
-# from machine import Pin, UART, SoftI2C
 # import math
+# from bmp180 import BMP180
+# from _thread import start_new_thread
 # from micropyGPS import MicropyGPS
-# uart = UART(2, baudrate=9600)
+
+# uart1 = UART(2, baudrate=9600, tx=17, rx=16)
 
 # sg90 = PWM(Pin(15, mode=Pin.OUT))
 # sg90.freq(50)
-
 # sg90.duty(25)
 # time.sleep(1)
 
-# bus = I2C(sda=Pin(21), scl=Pin(22), freq=100000)
+# bus = I2C(scl=Pin(22), sda=Pin(21), freq=100000)
 # bmp180 = BMP180(bus)
 # bmp180.oversample_sett = 2
 # bmp180.baseline = 101325
@@ -53,18 +50,6 @@
 # paracaidas_activado = False
 
 
-# def gps_data():
-#     buf = uart.readline()
-#     if uart.any():
-#         for char in buf:
-#             gps.update(chr(char))
-
-#     print("hora", gps.timestamp)
-#     print("latitud", gps.latitude_string())
-#     print("longitud",  gps.longitude_string())
-#     print("satelites", gps.satellites_in_use)
-
-
 # def activar_paracaidas():
 #     sg90.duty(170)
 #     time.sleep(1)
@@ -77,6 +62,19 @@
 #         f.write(str(time.time()) + "," + str(int(altura_actual)) + "," +
 #                 str(int(altura_actual)) + "," + str(int(altura_actual)) + "\n")
 #         print("Estado almacenado", altura_actual)
+
+
+# def gps_data():
+#     buf = uart1.readline()
+#     if uart1.any():
+#         for char in buf:
+#             gps.update(chr(char))
+
+#     print("hora", gps.timestamp)
+#     print("latitud", gps.latitude_string())
+#     print("longitud",  gps.longitude_string())
+#     print("satelites", gps.satellites_in_use)
+#     print(temp, p, altitude)
 
 
 # def toma_datos():
@@ -143,36 +141,44 @@
 #         raise
 
 
-from loraE22 import ebyteE22
-import machine
-from machine import Pin
-import utime
-import ubinascii
+from machine import UART
+import time
+from micropyGPS import MicropyGPS
+from lora_e220 import LoRaE220, Configuration
+from lora_e220_constants import FixedTransmission, RssiEnableByte
+from lora_e220_operation_constant import ResponseStatusCode
 
-me   = 0
-peer = 1
-addr = [0x0000, 0x0001]
-chan = [0x00, 0x00]
+utc_time = ""
+latitud = ""
+longitud = ""
+satelites = ""
+gps = MicropyGPS()
 
-M0pin = 25
-M1pin = 26
-AUXpin = 14
+uart1 = UART(1, baudrate=9600)
+uart2 = UART(2, baudrate=9600, tx=17, rx=16)
+lora = LoRaE220('400T30D', uart2, aux_pin=13, m0_pin=12, m1_pin=14)
+code = lora.begin()
+print("Initialization: {}", ResponseStatusCode.get_description(code))
+code, configuration = lora.get_configuration()
 
-e22 = ebyteE22(M0pin, M1pin, AUXpin, Port='U2', Address=addr[me], Channel=chan[me], debug=False)
+print("Retrieve configuration: {}", ResponseStatusCode.get_description(code))
 
-unique_id = ubinascii.hexlify(machine.unique_id()).decode("ascii")
 
-e22.config['rssi'] = 1
+def gps_data():
+    buf = uart1.readline()
+    if uart1.any():
+        for char in buf:
+            gps.update(chr(char))
 
-e22.start()
+    print("hora", gps.timestamp)
+    print("latitud", gps.latitude_string())
+    print("longitud",  gps.longitude_string())
+    print("satelites", gps.satellites_in_use)
+    print(temp, p, altitude)
 
-msg_no = 0
+
 while True:
-    message = "ESP32 ID: {} / MsgNo: {}".format(unique_id, msg_no)
-    tx_msg = { 'msg': message }
-    print('Node %d TX: address %d - channel %d - message %s'%(me, addr[peer], chan[peer], tx_msg))
-    e22.sendMessage(addr[peer], chan[peer], tx_msg, useChecksum=True)
-    msg_no += 1
-    utime.sleep_ms(2000)
-
-e22.stop()
+    message = 'Hello, world!\n\r' + gps.latitude_string() + gps.latitude_string()
+    code = lora.send_transparent_message(message)
+    print("Send message: {}", ResponseStatusCode.get_description(code))
+    time.sleep(1)
