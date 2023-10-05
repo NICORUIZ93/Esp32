@@ -141,44 +141,86 @@
 #         raise
 
 
-from machine import UART
+import machine
 import time
+import os
+import sdcard
+from machine import UART, Pin
 from micropyGPS import MicropyGPS
 from lora_e220 import LoRaE220, Configuration
 from lora_e220_constants import FixedTransmission, RssiEnableByte
 from lora_e220_operation_constant import ResponseStatusCode
+from _thread import start_new_thread
 
-utc_time = ""
+
 latitud = ""
 longitud = ""
-satelites = ""
+timestamp = ""
+satellites = ""
 gps = MicropyGPS()
 
-uart1 = UART(1, baudrate=9600)
 uart2 = UART(2, baudrate=9600, tx=17, rx=16)
+uart1 = UART(1, baudrate=9600, tx=32, rx=33)
+# _______________________________________________________________________________
+
 lora = LoRaE220('400T30D', uart2, aux_pin=13, m0_pin=12, m1_pin=14)
 code = lora.begin()
 print("Initialization: {}", ResponseStatusCode.get_description(code))
 code, configuration = lora.get_configuration()
-
 print("Retrieve configuration: {}", ResponseStatusCode.get_description(code))
+# _______________________________________________________________________________
+spi = machine.SPI(1, baudrate=10000000, polarity=0, phase=0, sck=Pin(
+    18), mosi=Pin(23), miso=Pin(19))
+
+cs = machine.Pin(5, Pin.OUT)
+sd = sdcard.SDCard(spi, cs)
+os.mount(sd, "/sd")
+
+filename = '/sd/data.csv'
+with open(filename, 'w') as file:
+    file.write('timestamp, latitud, longitud, satellites\n')
+# _______________________________________________________________________________
+
+
+def toma_datos():
+    while True:
+        with open(filename, 'a') as f:
+            f.write(":".join(map(str, timestamp)) + ","
+                    + str(latitud) + ","  # Convierte latitud a cadena
+                    + str(longitud) + ","  # Convierte longitud a cadena
+                    + str(satellites) + "\n")
+            print("Dato almacenado")
+        time.sleep(1)
+
+
+start_new_thread(toma_datos, ())
 
 
 def gps_data():
+    global latitud
+    global longitud
+    global timestamp
+    global satellites
     buf = uart1.readline()
     if uart1.any():
         for char in buf:
             gps.update(chr(char))
 
-    print("hora", gps.timestamp)
-    print("latitud", gps.latitude_string())
-    print("longitud",  gps.longitude_string())
-    print("satelites", gps.satellites_in_use)
-    print(temp, p, altitude)
+    latitud = gps.latitude_string()
+    longitud = gps.longitude_string()
+    timestamp = gps.timestamp
+    satellites = gps.satellites_in_use
 
 
 while True:
-    message = 'Hello, world!\n\r' + gps.latitude_string() + gps.latitude_string()
+    gps_data()
+    message = "Latitud: {}\nLongitud: {}\nHora: {}\nSatélites: {}".format(
+        latitud,
+        longitud,
+        timestamp,
+        satellites
+    )
     code = lora.send_transparent_message(message)
     print("Send message: {}", ResponseStatusCode.get_description(code))
-    time.sleep(1)
+    print(message)
+    time.sleep(2)
