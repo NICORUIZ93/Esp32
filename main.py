@@ -152,6 +152,7 @@ from lora_e220_operation_constant import ResponseStatusCode
 from _thread import start_new_thread
 from bmp180 import BMP180
 
+pulse_pin = Pin(15, Pin.OUT)
 
 bus = I2C(scl=Pin(22), sda=Pin(21), freq=100000)
 bmp180 = BMP180(bus)
@@ -169,7 +170,11 @@ longitud = ""
 timestamp = ""
 satellites = ""
 altura = ""
+estado = 0
+altura_inicial = bmp180.altitude
+
 gps = MicropyGPS()
+
 
 uart2 = UART(2, baudrate=9600, tx=17, rx=16)
 uart1 = UART(1, baudrate=9600, tx=32, rx=33)
@@ -241,6 +246,29 @@ while True:
         str((bmp180.pressure)),
         str((bmp180.temperature))
     )
+    altura_actual = int(bmp180.altitude)
+
+    if altura_actual >= (altura_inicial + 100) and estado == 0:
+        print("Foto 1")
+        pulse_pin.on()
+        time.sleep(1)  # espera 1 segundo
+        pulse_pin.off()
+        time.sleep(1)  # espera 1 segundo
+        estado = 1
+    elif altura_actual >= (altura_inicial + 300) and estado == 1:
+        print("Foto 2")
+        pulse_pin.on()
+        time.sleep(1)  # espera 1 segundo
+        pulse_pin.off()
+        time.sleep(1)  # espera 1 segundo
+        estado = 2
+    elif altura_actual >= (altura_inicial + 500) and estado == 2:
+        print("Foto 3")
+        pulse_pin.on()
+        time.sleep(1)  # espera 1 segundo
+        pulse_pin.off()
+        time.sleep(1)  # espera 1 segundo
+        estado = 3
     code = lora.send_transparent_message(message)
     print("Send message: {}", ResponseStatusCode.get_description(code))
     print(message)
