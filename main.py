@@ -140,23 +140,35 @@
 #         print("An exception occurred")
 #         raise
 
-
 import machine
 import time
 import os
 import sdcard
-from machine import UART, Pin
+from machine import UART, Pin, I2C
 from micropyGPS import MicropyGPS
 from lora_e220 import LoRaE220, Configuration
 from lora_e220_constants import FixedTransmission, RssiEnableByte
 from lora_e220_operation_constant import ResponseStatusCode
 from _thread import start_new_thread
+from bmp180 import BMP180
 
 
+bus = I2C(scl=Pin(22), sda=Pin(21), freq=100000)
+bmp180 = BMP180(bus)
+bmp180.oversample_sett = 2
+bmp180.baseline = 101325
+
+temp = bmp180.temperature
+p = bmp180.pressure
+altitude = bmp180.altitude
+print(temp, p, altitude)
+
+# _______________________________________________________________________________
 latitud = ""
 longitud = ""
 timestamp = ""
 satellites = ""
+altura = ""
 gps = MicropyGPS()
 
 uart2 = UART(2, baudrate=9600, tx=17, rx=16)
@@ -178,7 +190,8 @@ os.mount(sd, "/sd")
 
 filename = '/sd/data.csv'
 with open(filename, 'w') as file:
-    file.write('timestamp, latitud, longitud, satellites\n')
+    file.write(
+        'timestamp, latitud, longitud, satellites, altura, Altura, Presion, temperatura\n')
 # _______________________________________________________________________________
 
 
@@ -186,11 +199,13 @@ def toma_datos():
     while True:
         with open(filename, 'a') as f:
             f.write(":".join(map(str, timestamp)) + ","
-                    + str(latitud) + ","  # Convierte latitud a cadena
-                    + str(longitud) + ","  # Convierte longitud a cadena
-                    + str(satellites) + "\n")
-            print("Dato almacenado")
-        time.sleep(1)
+                    + str(latitud) + ","
+                    + str(longitud) + ","
+                    + str(satellites) + ","
+                    + str(altura) + ","
+                    + str((bmp180.altitude)) + ","
+                    + str((bmp180.pressure)) + ","
+                    + str((bmp180.temperature))+"\n")
 
 
 start_new_thread(toma_datos, ())
@@ -201,6 +216,7 @@ def gps_data():
     global longitud
     global timestamp
     global satellites
+    global altura
     buf = uart1.readline()
     if uart1.any():
         for char in buf:
@@ -210,15 +226,20 @@ def gps_data():
     longitud = gps.longitude_string()
     timestamp = gps.timestamp
     satellites = gps.satellites_in_use
+    altura = gps.altitude
 
 
 while True:
     gps_data()
-    message = "Latitud: {}\nLongitud: {}\nHora: {}\nSatélites: {}".format(
+    message = "Latitud: {}\r\nLongitud: {}\r\nHora: {}\r\nSatélites: {}\r\naltura: {}\r\nAltura: {}\r\nPresion: {}\r\ntemperatura: {}\r\n".format(
         latitud,
         longitud,
         timestamp,
-        satellites
+        satellites,
+        altura,
+        str((bmp180.altitude)),
+        str((bmp180.pressure)),
+        str((bmp180.temperature))
     )
     code = lora.send_transparent_message(message)
     print("Send message: {}", ResponseStatusCode.get_description(code))
